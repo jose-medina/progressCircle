@@ -7,16 +7,31 @@
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <link rel="stylesheet" href="css/main.css">
+        <link rel="stylesheet" href="./main.css">
         <script type="application/javascript">
+            // demo
             var App = function () {
 
             }
 
             App.prototype.windowOnLoad = function () {
-                Array.prototype.slice.call(document.querySelectorAll('.progress-circle')).forEach(function (elem) {
+                var elems = Array.prototype.slice.call(document.querySelectorAll('.progress-circle'));
+                elems.forEach(function (elem) {
                     elem['ui-ProgressCircle'] = new ProgressCircle(elem);
-                })
+                });
+
+                document.querySelector('#progress-circle-clockwise').addEventListener('click', function (event) {
+                    elems.forEach(function (elem) {
+                        elem['ui-ProgressCircle'].reset();
+                        elem['ui-ProgressCircle'].setProgress(0.8, true);
+                    });
+                });
+                document.querySelector('#progress-circle-anticlockwise').addEventListener('click', function (event) {
+                    elems.forEach(function (elem) {
+                        elem['ui-ProgressCircle'].reset();
+                        elem['ui-ProgressCircle'].setProgress(0.8, false);
+                    });
+                });
             }
 
             var app = new App()
@@ -27,7 +42,11 @@
         </script>
     </head>
     <body>
+        <h1>Demo - Progress Circle</h1>
         <div class="progress-circle"></div>
+
+        <button id="progress-circle-clockwise">80% clockwise</button>
+        <button id="progress-circle-anticlockwise">80% anticlosewise</button>
        
         <script src="./progressCircle.js"></script>
     </body>

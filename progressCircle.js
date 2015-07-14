@@ -5,9 +5,11 @@
 (function (window, document) {
 	'use strict';
 
-	/*-
-	 * progress circle module:
-	-*/
+	/**
+	 * ProgressCircle
+	 * @param {object} el - progress circle dom node
+	 * @param {object} options - options object.
+	 */
 	var ProgressCircle = function (el, options) {
 		this.defaults = {
 			// canvas
@@ -34,10 +36,9 @@
 	}
 
 	ProgressCircle.prototype = {
-		/*-
-		 * query the important elements from this module and
-		 * bind the event listeners 
-		-*/
+		/**
+		 * Initialize the module
+		 */
 		_initialize: function() {	
 			this.id = Math.random().toString(32).slice(2).substr(0, 5);
 			this.progress = 0;
@@ -51,32 +52,29 @@
 			// get current theme colors
 			this._getElThemeColors();
 			this.gradient = this._createGradient(this.startTheta);
-			this._calculateProgress();
 
 			this._canvas();
 			// this._renderGradient(true);
 		},
-		/*-
+		/**
 		 * clear progress circle
-		-*/
-		clearCanvas: function() {
+		 */
+		_clearCanvas: function() {
 			// clear canvas
 			this.context.clearRect(0, 0, this.width, this.height);
 		},
-		/*-
-		 * refresh progress circle from outside the widget
-		-*/
-		refresh: function() {
+		/**
+		 * reset progress circle from
+		 */
+		reset: function() {
 			// clear canvas
-			this.clearCanvas();
-			this._getElThemeColors();
-			this._calculateProgress();
-			this._renderGradient(true);
+			this._clearCanvas();
+			this.progress = 0;
 		},
-		/*-
-		 * _canvas
-		-*/
-		_canvas: function(o) {
+		/**
+		 * create the canvas
+		 */
+		_canvas: function() {
 			this.canvas = document.createElement("canvas");
 			this.canvas.setAttribute('id', this.id);
 			this.canvas.setAttribute('width', this.width);
@@ -88,7 +86,8 @@
 			this.context.imageSmoothingEnabled = false;
 		},
 		/**
-		 *
+		 * get colors
+		 * @todo: get them from options
 		 */
 		_getElThemeColors: function() {
 			// get colors
@@ -102,16 +101,17 @@
 			});
 		},
 		/**
-		 * define the gradients
-		 **/
-		_createGradient: function(start, end, radius) {
+		 * create the gradient
+		 * @param {number} start - the point from where the gradient values is goint to be calculated
+		 * @returns {object|Array}
+		 */
+		_createGradient: function(start) {
 			// colors
 			var n = this.colors.length,
 				i = 0,
 				// interpolation parameters
 				theta = 0,
 				increment = Math.PI / 360,
-				interpolation = 0,
 				section = Math.PI * 2 / n,
 				sectionStart,
 				// gradient
@@ -122,45 +122,56 @@
 				sectionStart = start + section * i;
 				// section - increment avoid overlaping
 				for (; theta < section - increment; theta += increment) {
-					interpolation = theta / section;
-					gradient[parseFloat(theta + sectionStart)] = this._interpolateRGBHelper(this.colors[i], this.colors[(i + 1) % n], interpolation);					
+					gradient.push({
+						// @params: colorCurrentSection, colorNextSection, interpolation
+						color: this._interpolateRGBHelper(this.colors[i], this.colors[(i + 1) % n], theta / section),
+						theta: parseFloat(theta + sectionStart)
+					});
 				}
 				theta = 0;
 			}
 
 			return gradient;
 		},
-		_renderGradient: function(from, to) {
+		/**
+		 * render gradient. Performs animation
+		 * @param {number} from - the point from where the gradient values is goint to be calculated
+		 * @param {number} to - the point from where the gradient values is goint to be calculated
+		 * @param {boolean} clockwise - clockwise if true, anticlockwise if false
+		 */
+		_renderGradient: function(from, to, clockwise) {
 			var that = this,
-				clockWise = from < to,
 				gradientLength = this.gradient.length,
-				// gradient = this._createGradient(this.startTheta),
-			// show progress
-				keys = this._gradientSortHelper(this.gradient.slice(Math.floor(gradientLength * from), Math.floor(gradientLength * to)), clockWise),
-				length = keys.length,
-				i = length - 1;
+				from = 	clockwise ? from : Math.abs(from - 1),
+				to = 	clockwise ? to : Math.abs(to - 1),
+				fromIndex = from < to ? from : to,
+				tillIndex = from < to ? to : from,
+				// show progress
+				subset = this.gradient.slice(Math.floor(gradientLength * fromIndex), Math.floor(gradientLength * tillIndex)),
+				length = subset.length;
 
-			this.Utils.delayLoop({
-				iteration: length - 1,
+			this.delayLoop(function (loop) {
+				var elem = subset[loop.iteration];
+				this._drawLine(elem.theta, elem.color);
+			}, {
+				iteration: clockwise ? 0 : length - 1,
 				length: length,
-				hasNext: function (iteration) {
-					return iteration > 0;
-				},
-				nextIteration: function (iteration) {
-					return iteration - 1;
-				},
-				actionOnLoop: this._drawLine.bind(this),
-				actionOpts: {keys}
+				clockwise: clockwise,
+				done: function () {
+					this.progress = to;
+				}
 			});
 		},
-		_drawLine: function(options) {//, isProgress) {
-			var theta = options.keys[options.iteration],
-				// params: radius, theta
-				outterCoord = this._polarCoordinatesHelper(this.width / 2, theta),
+		/**
+		 * draw line of the gradient
+		 * @param {function} actionOnLoop - actions to be done in every iteration
+		 * @param {object} options - loop options
+		 */
+		_drawLine: function(theta, color) {//, isProgress) {
+			// params: radius, theta
+			var outterCoord = this._polarCoordinatesHelper(this.width / 2, theta),
 				// params: innerRadius, theta
 				innerCoord = this._polarCoordinatesHelper(0, theta),
-				color = this.gradient[theta],
-				//opacity = isProgress && ((length - iteration) / length) <= this.progress ? 1 : 0.3;
 				opacity = 1;
 
 			this.context.save();
@@ -173,20 +184,83 @@
 			this.context.stroke();
 		},
 		/**
-		 * sort gradient helper
+		 * delay loop
+		 * @param {function} actionOnLoop - actions to be done in every iteration
+		 * @param {object} options - loop options
 		 */
-		_gradientSortHelper: function(array, clockWise) {
-			// Somewhere reusable
-			function sort(a, b) {
-				var anum = parseFloat(a),
-					bnum = parseFloat(b);
-				return clockWise ? anum - bnum : bnum - anum;
-			}
+		delayLoop: function (actionOnLoop, options) {
+			var that = this,
+				loop,
+				defaults = {
+					iterationRate: 5,
+					iteration: 0,
+					length: 0,
+					clockwise: true,
+					speed: 10
+				},
+				options = this.Utils.extend(defaults, options),
+				iteration = options.iteration,
+				drawTill = this._tillIterationIndex.call(options, iteration);
 
-			return Object.keys(array).sort(sort);
+			loop = function () {
+				setTimeout(function() {
+					while (that._hasNextIteration.call(options, iteration, drawTill)) {
+						actionOnLoop.call(that, {iteration: iteration, length: options.length});
+						iteration = that._nextIteration.call(options, iteration);
+					}
+					
+					if (that._hasNextLoop.call(options, iteration)) {
+						drawTill = that._tillIterationIndex.call(options, iteration);
+						loop();
+					} else {
+						options.done.call(that);
+					}
+				}, options.speed);
+			}
+			// first iteration
+			loop();
 		},
 		/**
-		 * Interpolate colors
+		 * delay loop helper
+		 * @param {number} iteration - current iteration index
+		 * @param {number} - index till where the while can run 
+		 */
+		_tillIterationIndex: function (iteration) {
+			return this.clockwise ? 
+				((iteration + this.iterationRate) < this.length ? (iteration + this.iterationRate) : this.length - 1)
+					:
+				((iteration - this.iterationRate) > 0 ? (iteration - this.iterationRate) : 0);
+		},
+		/**
+		 * delay loop helper
+		 * @param {number} iteration - current iteration index
+		 * @param {number} drawTill - index till where the while can run 
+		 * @returns {boolean} - if internal while has next iteration 
+		 */
+		_hasNextIteration: function (iteration, drawTill) {
+			return this.clockwise ? iteration < drawTill : iteration >= drawTill;
+		},
+		/**
+		 * delay loop helper
+		 * @param {number} iteration - current iteration index
+		 * @returns {boolean} - if delay loop has next iteration 
+		 */
+		_hasNextLoop: function (iteration) {
+			return this.clockwise ? iteration < this.length - 1 : iteration > 0;
+		},
+		/**
+		 * delay loop helper
+		 * @param {number} iteration - current iteration index
+		 * @returns {number} - next iteration index
+		 */
+		_nextIteration: function (iteration) {
+			return this.clockwise ? iteration + 1 : iteration - 1;
+		},
+		/**
+		 * interpolate colors
+		 * @param {object} color1 - rgb color
+		 * @param {object} color2 - rgb color
+		 * @returns {object} - rgb color interpolation
 		 */
 		_interpolateRGBHelper: function(color1, color2, p) {
 			return {
@@ -196,7 +270,10 @@
 			}
 		},
 		/**
-		 * Interpolate colors
+		 * _polarCoordinatesHelper
+		 * @param {number} radius
+		 * @param {number} theta
+		 * @returns {object}
 		 */
 		_polarCoordinatesHelper: function(radius, theta) {
 			var cX = this.width / 2;
@@ -208,7 +285,9 @@
 			}
 		},
 		/**
-		 * hexadecimal to rgb colors
+		 * _hexToRgb
+		 * @param {number} hex
+		 * @returns {object}
 		 */
 		_hexToRgb: function(hex) {
 			var result = hex.length > 4 ?
@@ -221,36 +300,34 @@
 				b: parseInt(result[3], 16)
 			} : null;
 		},
-		/*-
-		 *
-		-*/
-		_calculateProgress: function() {
-			// date calculation
-			var endDate = parseInt(this.el.getAttribute("data-enddate"));
-			endDate = new Date(endDate);
-			var now = new Date();
-			var day = 3600 * 24 * 1000;
-			var diff = Math.round(parseFloat((endDate.setHours(0, 0, 0) - now.setHours(0, 0, 0)) / day));
-			// progress parameters
-			this.progress = (diff <= 14 && diff >= 0) ? (14 - diff) / 14 * 0.75 + 0.25 : 0.25;
-		},
-		/*-
-		 * _getHexColor
-		-*/
+		/**
+		 * _getRGBString
+		 * @param {object} object
+		 * @param {opacity} number
+		 * @returns {string}
+		 */
 		_getRGBString: function(object, opacity) {
 			return "rgba(" + object.r + ", " + object.g + ", " + object.b + ", " + opacity + ")";
 		},
+		/**
+		 * get progress
+		 * @returns {number}
+		 */
 		getProgress: function () {
 			return this.progress;
 		},
 		/**
-		 * set progress from 0 till 1
+		 * set progress
+		 * @param {number} progress
+		 * @param {boolean} clockwise
 		 */
-		setProgress: function (progress) {
-			this._renderGradient(this.progress, progress);
+		setProgress: function (progress, clockwise) {
+			this._renderGradient(this.progress, progress, clockwise);
 		}
 	};
-
+	/**
+	 * Utils
+	 */
 	ProgressCircle.prototype.Utils = {
 		extend: function (a, b) {
 			var key;
@@ -270,41 +347,6 @@
 			} catch (error) {
 				throw new Error('Options format is not correct');
 			}
-		},
-		delayLoop: function (options) {
-			var that = this,
-				defaults = {
-					iterationRate: 5,
-					hasNext: function (iteration) {
-						return iteration > 0;
-					},
-					nextIteration: function (iteration) {
-						return iteration - 1;
-					}
-				},
-				options = that.extend(defaults, options),
-				tillIteration = function (iteration) {
-					return (iteration - options.iterationRate) > 0 ? (iteration - options.iterationRate) : 0;
-				},
-				iteration = options.iteration,
-				drawTill = tillIteration,
-				loop;
-
-			loop = function () {
-				setTimeout(function() {
-					while (iteration >= drawTill) {
-						options.actionOnLoop(that.extend(options.actionOpts, {iteration: iteration, length: length}));
-						iteration = options.nextIteration(iteration);
-					}
-					
-					if (options.hasNext(iteration)) {
-						drawTill = tillIteration(iteration);
-						loop();
-					}
-				}, 0);
-			}
-
-			loop();
 		}
 	};
 
